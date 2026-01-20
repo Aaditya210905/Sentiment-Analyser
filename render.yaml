@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: sentiment-analyzer
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt && python -c "import nltk; nltk.download('stopwords'); nltk.download('punkt'); nltk.download('wordnet')"
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
