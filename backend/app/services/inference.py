@@ -5,7 +5,7 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import tokenizer_from_json
-from ..utils.preprocessing import preprocess_text
+from ..utils.preprocessing import prepare_text
 
 # Get the project root directory
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -35,7 +35,7 @@ def load_resources():
         # Load tokenizer
         print(f"Loading tokenizer from {TOKENIZER_PATH}...")
         with open(TOKENIZER_PATH, 'r') as f:
-            tokenizer_json = json.load(f)
+            tokenizer_json = f.read()
         tokenizer = tokenizer_from_json(tokenizer_json)
         print("Tokenizer loaded successfully")
         
@@ -57,7 +57,7 @@ def predict_sentiment(text: str) -> dict:
                 raise RuntimeError("Failed to load model resources")
         
         # Preprocess text
-        cleaned_text = preprocess_text(text)
+        cleaned_text = prepare_text(text)
         
         # Tokenize and pad
         sequence = tokenizer.texts_to_sequences([cleaned_text])
