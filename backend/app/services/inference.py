@@ -1,76 +1,83 @@
-import pickle
-from tensorflow.keras.preprocessing.text import tokenizer_from_json
+import os
+import json
+import numpy as np
+import tensorflow as tf
 from tensorflow.keras.models import load_model
-from pathlib import Path
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.text import tokenizer_from_json
+from ..utils.preprocessing import preprocess_text
 
 # Get the project root directory
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+MODEL_PATH = os.path.join(PROJECT_ROOT, 'models', 'sentiment_model.keras')
+TOKENIZER_PATH = os.path.join(PROJECT_ROOT, 'models', 'tokenizer.json')
 
-class SentimentInference:
-    def __init__(self):
-        self.model = None
-        self.tokenizer = None
-        self.label_encoder = None
-        self.load_models()
+# Global variables
+model = None
+tokenizer = None
+
+def load_resources():
+    """Load model and tokenizer on startup"""
+    global model, tokenizer
     
-    def load_models(self):
-        """Load the trained model, tokenizer, and label encoder"""
-        models_dir = PROJECT_ROOT / "models"
-        
-        # Load tokenizer
-        with open(models_dir / "tokenizer.json", "r", encoding="utf-8") as f:
-            self.tokenizer = tokenizer_from_json(f.read())
+    try:
+        # Check if files exist
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"Model not found at {MODEL_PATH}")
+        if not os.path.exists(TOKENIZER_PATH):
+            raise FileNotFoundError(f"Tokenizer not found at {TOKENIZER_PATH}")
         
         # Load model
-        self.model = load_model(models_dir / "sentiment_model.keras")
+        print(f"Loading model from {MODEL_PATH}...")
+        model = load_model(MODEL_PATH)
+        print("Model loaded successfully")
         
-        # Load label encoder
-        with open(models_dir / "label_encoder.pkl", "rb") as f:
-            self.label_encoder = pickle.load(f)
+        # Load tokenizer
+        print(f"Loading tokenizer from {TOKENIZER_PATH}...")
+        with open(TOKENIZER_PATH, 'r') as f:
+            tokenizer_json = json.load(f)
+        tokenizer = tokenizer_from_json(tokenizer_json)
+        print("Tokenizer loaded successfully")
+        
+        return True
+    except Exception as e:
+        print(f"Error loading resources: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def predict_sentiment(text: str) -> dict:
+    """Predict sentiment for input text"""
+    global model, tokenizer
     
-    def predict(self, text: str) -> dict:
-        """
-        Predict sentiment for the given text
+    try:
+        # Ensure resources are loaded
+        if model is None or tokenizer is None:
+            if not load_resources():
+                raise RuntimeError("Failed to load model resources")
         
-        Args:
-            text: Input text to analyze
-            
-        Returns:
-            Dictionary with sentiment and probability
-        """
-        import pandas as pd
-        import sys
-        from pathlib import Path
+        # Preprocess text
+        cleaned_text = preprocess_text(text)
         
-        # Add backend directory to path
-        backend_dir = Path(__file__).parent.parent.parent
-        if str(backend_dir) not in sys.path:
-            sys.path.insert(0, str(backend_dir))
+        # Tokenize and pad
+        sequence = tokenizer.texts_to_sequences([cleaned_text])
+        padded_sequence = pad_sequences(sequence, maxlen=300, padding='post', truncating='post')
         
-        from app.utils.preprocessing import preprocess_sample
+        # Predict
+        prediction = model.predict(padded_sequence, verbose=0)[0][0]
         
-        # Convert to pandas Series
-        text_series = pd.Series([text])
-        
-        # Preprocess the text
-        processed_text = preprocess_sample(
-            text_series,
-            tokenizer=self.tokenizer
-        )
-        
-        # Make prediction
-        predicted_prob = self.model.predict(processed_text, verbose=0)
-        predicted_class = (predicted_prob > 0.5).astype(int)
-        
-        # Get sentiment label
-        sentiment = self.label_encoder.inverse_transform(predicted_class)[0]
-        probability = float(predicted_prob[0][0])
+        # Format response
+        sentiment = "Positive" if prediction >= 0.5 else "Negative"
+        confidence = float(prediction * 100 if prediction >= 0.5 else (1 - prediction) * 100)
         
         return {
-            "sentiment": sentiment,
-            "probability": probability,
-            "confidence": probability if sentiment == "positive" else 1 - probability
+            "Predicted Sentiment": sentiment,
+            "probability": float(prediction),
+            "confidence": round(confidence, 2)
         }
-
-# Global instance
-inference_service = SentimentInference()
+        
+    except Exception as e:
+        print(f"Prediction error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise

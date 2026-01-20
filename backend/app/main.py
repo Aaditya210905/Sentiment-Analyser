@@ -4,20 +4,35 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from contextlib import asynccontextmanager
+import os
 
 # Add backend directory to path
 backend_dir = Path(__file__).parent.parent
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
-from app.services.inference import inference_service
+from app.services.inference import predict_sentiment, load_resources
 
-# Initialize FastAPI app
+# Lifespan context manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print("Starting up application...")
+    success = load_resources()
+    if not success:
+        print("WARNING: Failed to load model resources!")
+    yield
+    # Shutdown (if needed)
+    print("Shutting down application...")
+
+# Initialize FastAPI app with lifespan
 app = FastAPI(
     title="Sentiment Analysis API",
     description="AI-powered sentiment analysis using deep learning",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Enable CORS
@@ -26,7 +41,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8000",
         "http://127.0.0.1:8000",
-        "https://*.onrender.com"  # Allow all Render subdomains
+        "https://sentiment-analyser-czaw.onrender.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -39,12 +54,7 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 # Request/Response Models
 class SentimentRequest(BaseModel):
-    sentiment: str = Field(..., min_length=1, max_length=5000, description="Text to analyze")
-
-class SentimentResponse(BaseModel):
-    Predicted_Sentiment: str = Field(..., alias="Predicted Sentiment")
-    probability: float = Field(None, description="Probability score")
-    confidence: float = Field(None, description="Confidence percentage")
+    sentiment: str
 
 # Routes
 @app.get("/")
@@ -79,13 +89,8 @@ async def get_script():
         return FileResponse(str(js_path), media_type="application/javascript")
     raise HTTPException(status_code=404, detail="JavaScript file not found")
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "model_loaded": True}
-
-@app.post("/predict", response_model=SentimentResponse)
-async def predict_sentiment(request: SentimentRequest):
+@app.post("/predict")
+async def predict(request: SentimentRequest):
     """
     Predict sentiment of the provided text
     
@@ -94,17 +99,25 @@ async def predict_sentiment(request: SentimentRequest):
     Returns the predicted sentiment (Positive/Negative) with probability scores
     """
     try:
-        result = inference_service.predict(request.sentiment)
+        if not request.sentiment or not request.sentiment.strip():
+            raise HTTPException(status_code=400, detail="Text cannot be empty")
         
-        return {
-            "Predicted Sentiment": result["sentiment"],
-            "probability": result["probability"],
-            "confidence": result["confidence"]
-        }
+        result = predict_sentiment(request.sentiment)
+        return result
     except Exception as e:
+        print(f"Error in /predict endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    from .services.inference import model, tokenizer
+    return {
+        "status": "healthy",
+        "model_loaded": model is not None,
+        "tokenizer_loaded": tokenizer is not None
+    }
+
 if __name__ == "__main__":
-    import os
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
