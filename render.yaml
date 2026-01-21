@@ -4,10 +4,8 @@ services:
     env: python
     region: oregon
     plan: free
-    buildCommand: pip install -r backend/requirements.txt && python -c "import nltk; import os; nltk_dir = os.getenv('NLTK_DATA', '/opt/render/nltk_data'); nltk.download('stopwords', download_dir=nltk_dir); nltk.download('punkt', download_dir=nltk_dir); nltk.download('wordnet', download_dir=nltk_dir); nltk.download('omw-1.4', download_dir=nltk_dir)"
+    buildCommand: pip install -r backend/requirements.txt"
     startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.0
-      - key: NLTK_DATA
-        value: /opt/render/nltk_data

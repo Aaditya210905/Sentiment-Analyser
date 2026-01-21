@@ -6,24 +6,10 @@ from nltk.stem import WordNetLemmatizer
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-# Set NLTK data path to a writable location
-# On Render, use /opt/render/nltk_data which is writable
-nltk_data_dir = os.getenv('NLTK_DATA', '/opt/render/nltk_data')
-if nltk_data_dir not in nltk.data.path:
-    nltk.data.path.insert(0, nltk_data_dir)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+NLTK_DATA_DIR = os.path.join(BASE_DIR, "nltk_data")
 
-# Download required NLTK resources if not present
-try:
-    nltk.data.find('corpora/wordnet')
-except LookupError:
-    print("Downloading NLTK wordnet...")
-    nltk.download('wordnet', download_dir=nltk_data_dir, quiet=True)
-
-try:
-    nltk.data.find('corpora/omw-1.4')
-except LookupError:
-    print("Downloading NLTK omw-1.4...")
-    nltk.download('omw-1.4', download_dir=nltk_data_dir, quiet=True)
+nltk.data.path.append(NLTK_DATA_DIR)
 
 lemmatizer = WordNetLemmatizer()
 
